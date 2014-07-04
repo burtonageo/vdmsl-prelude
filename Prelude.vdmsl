@@ -1,0 +1,306 @@
+/*
+  Prelude.vdmsl
+  
+  Copyright (c) George Burton 2013
+  
+  This file is released under the terms of the MIT license.
+  For full terms of the license, please see http://opensource.org/licenses/MIT,
+  or the included License.md file.
+ */
+
+module Prelude
+imports
+  from MATH
+    functions
+      ln: real -> real;
+exports
+  types
+    Ordering
+
+  functions
+    
+    fmap_sq[@T1, @T2]: (@T1 -> @T2) * seq of @T1 -> seq of @T2
+    fmap_st[@T1, @T2]: (@T1 -> @T2) * set of @T1 -> set of @T2
+
+    filter_sq[@T]: (@T -> bool) * seq of @T -> seq of @T
+    filter_st[@T]: (@T -> bool) * set of @T -> set of @T
+
+    anyof_sq[@T]: (@T -> bool) * seq of @T -> bool
+    anyof_st[@T]: (@T -> bool) * set of @T -> bool
+
+    allof_sq[@T]: (@T -> bool) * seq of @T -> bool
+    allof_st[@T]: (@T -> bool) * set of @T -> bool 
+
+    set_to_seq[@T1]: set of @T -> seq of @T
+
+    anyval[@T]: set of @T -> [@T]
+
+    rev[@T1]: seq of @T1 -> seq of @T1
+
+    foldr[@T1, @T2]: (@T1 * @T2 -> @T2) * @T2 * seq of @T1 -> @T2
+    foldl[@T1, @T2]: (@T1 * @T2 -> @T1) * @T1 * seq of @T2 -> @T1
+
+    fold_st[@T1, @T2]: (@T1 * @T2 -> @T2) * @T2 * set of @T1 -> @T2
+
+    zip[@T1, @T2]: seq of @T1 * seq of @T2 -> seq of (@T1 * @T2)
+    zip_to_map[@T1, @T2]: seq of @T1 * seq of @T2 -> map @T1 to @T2
+    zip_with[@T1, @T2, @T3]: (@T1 * @T2 -> @T3) * seq of @T1 * seq of @T2 -> seq of @T3
+
+    transpose[@T]: seq of seq of @T -> seq of seq of @T;
+    repeat[@T]: @T * nat +> seq of @T
+    range: int * int * int -> seq of int
+    rrange: real * real * real -> seq of real
+
+    i_to_str:  int  +> seq of char
+    r_to_str: real -> seq of char
+
+    quickSort[@T]: seq of @T * (@T * @T -> Ordering) -> seq of real
+
+definitions
+-------------------------------------------------------------------
+  /**
+   * collection functions
+   * --------------------
+   **/
+  functions
+    --! Applies a function to every element in a sequence
+    fmap_sq[@T1, @T2]: (@T1 -> @T2) * seq of @T1 -> seq of @T2
+    fmap_sq(f, xs) == [f(xs(i)) | i in set inds xs];
+
+    --! Applies a function to every element of a set in a non-deterministic order
+    fmap_st[@T1, @T2]: (@T1 -> @T2) * set of @T1 -> set of @T2
+    fmap_st(f, xs) == {f(x) | x in set xs};
+
+    --! Filters out elements in a sequence which match the predicate function
+    filter_sq[@T1]: (@T1 -> bool) * seq of @T1 -> seq of @T1
+    filter_sq(f, xs) == [xs(i) | i in set inds xs & f(xs(i))];
+
+    --! Filters out elements in a set which match the predicate function
+    filter_st[@T1]: (@T1 -> bool) * set of @T1 -> set of @T1
+    filter_st(f, xs) == {x | x in set xs & f(x)};
+
+    --! Applies the predicate function to every element in a sequence. If the predicate
+    --! return true on any element, then it returns true, otherwise it returns false
+    anyof_sq[@T]: (@T -> bool) * seq of @T -> bool
+    anyof_sq(f, xs) == foldl[bool, bool](lambda x: bool, y: bool & x or y,
+                                         false,
+                                         fmap_sq[@T, bool](f, xs));
+
+    --! Applies the predicate function to every element in a set. If the predicate
+    --! return true on any element, then it returns true, otherwise it returns false
+    anyof_st[@T]: (@T -> bool) * set of @T -> bool
+    anyof_st(f, xs) == fold_st[bool, bool](lambda x: bool, y: bool & x or y,
+                                           false,
+                                           fmap_st[@T, bool](f, xs));
+
+    --! Applies the predicate function to every element in a sequence. If the predicate
+    --! return false on any element, then this function returns false, otherwise it returns true
+    allof_sq[@T]: (@T -> bool) * seq of @T -> bool
+    allof_sq(f, xs) == foldl[bool, bool](lambda x: bool, y: bool & x and y,
+                                         true,
+                                         fmap_sq[@T, bool](f, xs));
+
+    --! Applies the predicate function to every element in a set. If the predicate
+    --! return false on any element, then this function returns false, otherwise it returns true
+    allof_st[@T]: (@T -> bool) * set of @T -> bool
+    allof_st(f, xs) == fold_st[bool, bool](lambda x: bool, y: bool & x and y,
+                                           true,
+                                           fmap_st[@T, bool](f, xs));
+
+    --! Converts a set into a sequence. The order of the sequence is undefined
+    set_to_seq[@T]: set of @T -> seq of @T
+    set_to_seq(xs) == let indices = {1,...,card xs + 1},
+                          seqMap  = {i |-> x | i in set indices, x in set xs}
+                      in [seqMap(i) | i in set indices]; 
+
+    --! Returns an arbitrary value from a set. If the set is empty, nil is returned.
+    anyval[@T]: set of @T -> [@T]
+    anyval(xs) == if xs = {} then nil else hd set_to_seq[@T](xs);
+
+    --! Reverses a sequence
+    rev[@T1]: seq of @T1 -> seq of @T1
+    rev(xs) == let newOrder = {(len xs) + 1 - i |-> xs(i) | i in set inds xs}
+               in xs ++ newOrder;
+                      
+
+    --! Standard left fold function
+    foldl[@T1, @T2]: (@T1 * @T2 -> @T1) * @T1 * seq of @T2 -> @T1
+    foldl(f, z, xs) == cases xs:
+                         [] -> z,
+                         -  -> foldl[@T1, @T2](f, f(z, hd xs), tl xs)
+                       end 
+    measure foldl_measure;
+
+    --! Standard right fold function
+    foldr[@T1, @T2]: (@T1 * @T2 -> @T2) * @T2 * seq of @T1 -> @T2
+    foldr(f, z, xs) == cases xs:
+                         [] -> z,
+                         -  -> f(hd xs, foldr[@T1, @T2](f, z, tl xs))
+                       end
+    measure foldr_measure;
+
+    --! A non-deterministic fold function on a set
+    fold_st[@T1, @T2]: (@T1 * @T2 -> @T2) * @T2 * set of @T1 -> @T2
+    fold_st(f, z, xs) == cases xs:
+                           {} -> z,
+                           -  -> let x = anyval[@T1](xs)
+                                 in fold_st[@T1, @T2](f, f(z, x), xs \ {x})
+                         end
+    measure fold_st_measure;
+
+    --! Zips two sequences together into a single sequence where
+    --! each element is a tuple of the elements in the corresponding positions
+    --! of the input sequences
+    zip[@T1, @T2]: seq of @T1 * seq of @T2 -> seq of (@T1 * @T2)
+    zip(xs1, xs2) == [mk_(xs1(i), xs2(i)) | i in set inds xs1]
+    pre len xs1 = len xs2;
+
+    --! Takes two sequences and makes a map where the elements of the first are keys
+    --! And the elements of the second are values
+    zip_to_map[@T1, @T2]: seq of @T1 * seq of @T2 -> map @T1 to @T2
+    zip_to_map(xs1, xs2) == {xs1(a) |-> xs2(b) | a in set inds xs1, b in set inds xs2}
+    pre len xs1 = len xs2;
+
+    --! Combines two sequences using the input function
+    zip_with[@T1, @T2, @T3]: (@T1 * @T2 -> @T3) * seq of @T1 * seq of @T2 -> seq of @T3
+    zip_with(f, xs1, xs2) == [f(xs1(i), xs2(i)) | i in set inds xs1]
+    pre len xs1 = len xs2;
+
+    transpose[@T]: seq of seq of @T -> seq of seq of @T
+    transpose(m) == fmap_sq[seq of seq of @T,
+                            seq of @T](lambda x: seq of seq of @T & hd x, m) ^
+                    transpose[@T](fmap_sq[seq of seq of @T,
+                                          seq of seq of @T](
+                                            lambda x: seq of seq of @T & tl x, m))
+    measure transpose_measure;
+
+    --! Takes a single value and repeats it n times to form a sequence
+    repeat[@T]: @T * nat +> seq of @T
+    repeat(v, l) == let rInds = {1,...,l},
+                        rMap  = {i |-> v | i in set rInds}  
+                    in [rMap(i) | i in set rInds];
+
+    --! Creates a sequence from the first parameter to the second, with a step
+    --! between each value
+    rrange: real * real * real -> seq of real
+    rrange(lbound, ubound, diff) == rrange_recurse(lbound, ubound, diff, [])                                     
+    pre lbound <= ubound and
+        diff < (ubound - lbound); 
+
+    rrange_recurse: real * real * real * seq of real -> seq of real
+    rrange_recurse(counter, ubound, diff, currentNums) ==
+      if counter > ubound
+        then currentNums
+        else rrange_recurse(counter + diff, ubound, diff, currentNums ^ [counter])
+    measure rrange_recurse_measure;
+
+    --! Creates a sequence form the first parameter to the second parameter, with
+    --! a step between each value
+    range: int * int * int -> seq of int
+    range(lbound, ubound, diff) == range_recurse(lbound, ubound, diff, [])
+    pre lbound <= ubound and
+        diff < (ubound - lbound);
+
+    range_recurse: int * int * int * seq of int -> seq of int
+    range_recurse(counter, ubound, diff, currentNums) ==
+      if counter > ubound
+        then currentNums ^ [counter]
+        else range_recurse(counter + diff, ubound, diff, currentNums ^ [counter])
+    measure range_recurse_measure;
+
+-------------------------------------------------------------------
+  /**
+   * measures
+   * --------------------
+   **/
+  functions
+    foldl_measure[@T1, @T2]: (@T1 * @T2 -> @T1) * @T1 * seq of @T2 -> nat
+    foldl_measure(-, -, xs) == len xs;
+
+    foldr_measure[@T1, @T2]: (@T1 * @T2 -> @T2) * @T2 * seq of @T1 -> nat
+    foldr_measure(-, -, xs) == len xs;
+
+    fold_st_measure[@T1, @T2]: (@T1 * @T2 -> @T2) * @T1 * set of @T1 -> nat
+    fold_st_measure(-, -, xs) == card xs;
+
+    transpose_measure[@T]: seq of seq of @T -> nat
+    transpose_measure(m) == len m;
+
+    range_recurse_measure: int * int * int * seq of int -> nat
+    range_recurse_measure(counter, ubound, diff, -) == (ubound - counter) / diff;
+
+    rrange_recurse_measure: real * real * real * seq of real -> nat
+    rrange_recurse_measure(counter, ubound, diff, -) == floor ((ubound - counter) / diff); 
+-------------------------------------------------------------------
+  /**
+   * show functions
+   * --------------------
+   **/
+  values
+    digitMap: map int to char = {0 |-> '0',
+                                 1 |-> '1',
+                                 2 |-> '2',
+                                 3 |-> '3',
+                                 4 |-> '4',
+                                 5 |-> '5',
+                                 6 |-> '6',
+                                 7 |-> '7',
+                                 8 |-> '8',
+                                 9 |-> '9'};
+
+  functions
+    num_to_digits: nat -> seq of nat
+    num_to_digits(n) == if n < 10
+                          then n
+                          else [n mod 10] ^ num_to_digits(n div 10)
+    measure num_to_digits_meas;
+
+    num_to_digits_meas: nat -> nat
+    num_to_digits_meas(n) == floor MATH`ln(n) + 1;
+
+    i_to_str(i: int)r: seq of char
+    post r = [digitMap(y) | y in set elems num_to_digits(i)];
+
+    r_to_str: real -> seq of char
+    r_to_str(rl) == is not yet specified;
+
+-------------------------------------------------------------------
+/**
+ * sort functions
+ * --------------------
+ **/
+  types
+    --! Represents an ordering of 2 values
+    --! * <Lt>   Corresponds to <
+    --! * <Eq>   Corresponds to ==
+    --! * <Gt>   Corresponds to >
+    Ordering = <Lt> | <Eq> | <Gt>;
+
+  functions
+    --! Sorts a sequence of reals using the quicksort algorithm
+    --! The comparison function should return an ordering of the first
+    --! parameter compared to the second
+    --! e.g. compare[int](1, 5) should return a <Lt> as 1 < 5
+    quickSort[@T]: seq of @T * (@T * @T -> Ordering) -> seq of real
+    quickSort(xs, cmp) == cases len xs:
+                            0 -> [],
+                            - -> let pivot = hd xs,
+                                     smallerSorted = quickSort([a | a <- xs &  cmp(a, x) == <Lt>
+                                                                            || cmp(a, x) == <Eq>]),
+                                     largerSorted  = quickSort([a | a <- xs &  cmp(a, x) == <Gt>  ])
+                                  in smallerSorted ^ [pivot] ^ largerSorted;
+-------------------------------------------------------------------
+/**
+ * higher-order functions
+ * --------------------
+ **/
+  functions
+    --! Compose 2 functions together to form a third
+    compose[@T0, @T1, @T2]: (@T1 -> @T2) * (@T2 -> @T3) -> (@T1 -> @T3) 
+    compose(f, g) == lambda x: @T0 & g(f(x));
+
+    --! Flips the arguments of a function so that they can be applied
+    --! In reverse order
+    flip[@T0, @T1, @T2]: (@T0 * @T1 -> @T2) -> (@T1 * @T0 -> @T2)
+    flip(f) == lambda y: @T1, X: @T0 & f(x, y);
+end Prelude
