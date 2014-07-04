@@ -302,5 +302,5 @@ definitions
     --! Flips the arguments of a function so that they can be applied
     --! In reverse order
     flip[@T0, @T1, @T2]: (@T0 * @T1 -> @T2) -> (@T1 * @T0 -> @T2)
-    flip(f) == lambda y: @T1, X: @T0 & f(x, y);
+    flip(f) == lambda y: @T1, x: @T0 & f(x, y);
 end Prelude
