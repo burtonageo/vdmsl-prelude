@@ -280,7 +280,7 @@ definitions
     Ordering = <Lt> | <Eq> | <Gt>;
 
   functions
-    --! Sorts a sequence of reals using the quicksort algorithm
+    --! Sorts a sequence using the quicksort algorithm
     --! The comparison function should return an ordering of the first
     --! parameter compared to the second
     --! e.g. compare[int](1, 5) should return a <Lt> as 1 < 5
@@ -288,9 +288,9 @@ definitions
     quickSort(xs, cmp) == cases len xs:
                             0 -> [],
                             - -> let pivot = hd xs,
+                                     largerSorted  = quickSort([a | a <- xs &  cmp(a, x) == <Gt>])
                                      smallerSorted = quickSort([a | a <- xs &  cmp(a, x) == <Lt>
                                                                             || cmp(a, x) == <Eq>]),
-                                     largerSorted  = quickSort([a | a <- xs &  cmp(a, x) == <Gt>  ])
                                   in smallerSorted ^ [pivot] ^ largerSorted;
 -------------------------------------------------------------------
 /**
